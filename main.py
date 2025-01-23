@@ -17,7 +17,7 @@ def set_seed(seed):
     np.random.seed(seed)
     t.manual_seed(seed)
     t.cuda.manual_seed(seed)
-    t.cuda.manual_seed_all(seed)  # 如果使用多GPU
+    t.cuda.manual_seed_all(seed)  
     t.backends.cudnn.deterministic = True
     t.backends.cudnn.benchmark = False
 
@@ -61,10 +61,9 @@ class Coach:
                 reses = self.testEpoch()
                 log(self.makePrint('Test', ep, reses, tstFlag))
                 self.saveHistory()
-                # 使用验证集的 Recall 指标来调整学习率
-                self.scheduler.step(reses['Recall'])  # 传入验证指标
+                
+                self.scheduler.step(reses['Recall'])  
             else:
-                # 如果当前 epoch 没有验证，则不更新调度器
                 pass
             current_lr = self.opt.param_groups[0]['lr']
             print(f'Current Learning Rate: {current_lr}')
@@ -75,7 +74,7 @@ class Coach:
     def prepareModel(self):
         self.model = MambaTransGNN_SelfSupervised().cuda()
         self.opt = t.optim.AdamW(self.model.parameters(), lr=args.lr, weight_decay=args.reg)
-        # 初始化 ReduceLROnPlateau 调度器，监控 Recall
+        
         self.scheduler = lr_scheduler.ReduceLROnPlateau(
             self.opt,
             mode='max',
@@ -85,7 +84,7 @@ class Coach:
             threshold=0.001,
             threshold_mode='abs',
             cooldown=0,
-            min_lr=1e-6             # 学习率的下限
+            min_lr=1e-6           
         )
 
     def trainEpoch(self):
@@ -144,7 +143,7 @@ class Coach:
             temTstLocs = tstLocs[batIds[i]]
             tstNum = len(temTstLocs)
             if tstNum == 0:
-                continue  # 避免除以零
+                continue  
             maxDcg = np.sum([np.reciprocal(np.log2(j + 2)) for j in range(min(tstNum, args.topk))])
             recall = dcg = 0
             for val in temTstLocs:
@@ -158,42 +157,40 @@ class Coach:
         return allRecall, allNdcg
 
     def saveHistory(self):
-        # 如果是第一个 epoch，直接返回
+
         if args.epoch == 0:
             return
 
-        # 检查并创建 History 文件夹
         history_dir = '../History'
         if not os.path.exists(history_dir):
             os.makedirs(history_dir)
 
-        # 保存历史记录
+
         history_path = os.path.join(history_dir, args.save_path + '.his')
         with open(history_path, 'wb') as fs:
             pickle.dump(self.metrics, fs)
 
-        # 检查并创建 Models 文件夹
         models_dir = '../Models'
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
 
-        # 保存模型
+
         model_path = os.path.join(models_dir, args.save_path + '.mod')
         content = {
             'model': self.model,
             'optimizer': self.opt.state_dict(),
-            'scheduler': self.scheduler.state_dict(),  # 保存调度器状态
+            'scheduler': self.scheduler.state_dict(),  
         }
         t.save(content, model_path)
 
-        # 打印日志
+
         log('Model Saved: %s' % args.save_path)
 
     def loadModel(self):
         ckp = t.load('../Models/' + args.load_model + '.mod')
         self.model = ckp['model']
         self.opt = t.optim.AdamW(self.model.parameters(), lr=args.lr, weight_decay=args.reg)
-        self.opt.load_state_dict(ckp['optimizer'])  # 加载优化器状态
+        self.opt.load_state_dict(ckp['optimizer'])  
         self.scheduler = lr_scheduler.ReduceLROnPlateau(
             self.opt,
             mode='max',
@@ -205,14 +202,14 @@ class Coach:
             cooldown=0,
             min_lr=1e-6
         )
-        self.scheduler.load_state_dict(ckp['scheduler'])  # 加载调度器状态
+        self.scheduler.load_state_dict(ckp['scheduler']) 
 
         with open('../History/' + args.load_model + '.his', 'rb') as fs:
             self.metrics = pickle.load(fs)
         log('Model Loaded')	
 
 if __name__ == '__main__':
-    # 设置随机种子
+
     set_seed(args.seed)
     
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
