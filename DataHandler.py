@@ -17,12 +17,6 @@ class DataHandler:
             predir = 'Data/ml-10m/'
         elif args.data == 'tmall':
             predir = 'Data/tmall/'
-        elif args.data == 'gowalla':
-            predir = 'Data/gowalla/'
-        elif args.data == 'gowalla0':
-            predir = 'Data/gowalla0/'
-        elif args.data == 'ml-1m':
-            predir = 'Data/ml-1m/'
         elif args.data == 'amazon-books':
             predir = 'Data/amazon-books/'
         self.predir = predir
@@ -80,16 +74,7 @@ class DataHandler:
         args.user, args.item = trnMat.shape
         self.torchBiAdj = self.makeTorchAdj(trnMat)
         self.mask = self.makeMask()
-
-        # ==========================
-        # 分层采样实现开始
-        # ==========================
-        # Step 1: 获取每个用户的度数
         user_degrees = np.array(trnMat.sum(axis=1)).flatten()  # shape: (user,)
-
-        # 按度数对用户分层，比如分为3层
-        # 您可根据实际情况决定层数和划分方式
-        # 这里以简单的三分位数为例
         low_th = np.percentile(user_degrees, 33)
         high_th = np.percentile(user_degrees, 66)
 
@@ -103,12 +88,8 @@ class DataHandler:
 
         user_strata = np.array([assign_stratum(d) for d in user_degrees])
 
-        # 获取训练数据集
         trnData = TrnData(trnMat)
 
-        # 根据用户的层给每个样本分配权重
-        # 假设低层用户稀缺，需要更大权重，中层其次，高层最低
-        # 权重可以根据分布情况灵活设置
         stratum_weights = {0: 2.0, 1: 1.5, 2: 1.0} 
         sample_weights = []
         for idx in range(len(trnData)):
@@ -118,19 +99,14 @@ class DataHandler:
             sample_weights.append(w)
 
         sample_weights = t.DoubleTensor(sample_weights)
-        
-        # 使用WeightedRandomSampler来进行分层抽样
-        sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 
-        # ==========================
-        # 分层采样实现结束
-        # ==========================
+        sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 
         self.trnLoader = dataloader.DataLoader(
             trnData, 
             batch_size=args.batch, 
-            sampler=sampler,  # 使用加权采样器
-            shuffle=False,    # sampler已定义权重分布，不需shuffle
+            sampler=sampler,  
+            shuffle=False,    
             num_workers=4, 
             pin_memory=True
         )
