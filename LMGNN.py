@@ -3,9 +3,9 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 import scipy.sparse as sp
-from Params import args  # 确保 args 包含所有必要的参数
+from Params import args  
 from mamba_ssm import Mamba
-from Utils.loss_torch import bpr_loss, l2_reg_loss, InfoNCE  # 确保这些函数可用
+from Utils.loss_torch import bpr_loss, l2_reg_loss, InfoNCE 
 
 class FeedForward(nn.Module):
     def __init__(self, d_model, inner_size, dropout=0.35):
@@ -54,24 +54,19 @@ class GNNLayer(nn.Module):
         super(GNNLayer, self).__init__()
 
     def forward(self, adj, embeds):
-        # 确保邻接矩阵和嵌入在同一设备上
         adj = adj.to(embeds.device)
         return torch.sparse.mm(adj, embeds)
 
 class MambaTransGNN_SelfSupervised(nn.Module):
     def __init__(self):
         super(MambaTransGNN_SelfSupervised, self).__init__()
-        #self.scale = nn.Parameter(torch.ones(args.latdim))
-        #self.shift = nn.Parameter(torch.zeros(args.latdim))
-        # 初始化用户和物品嵌入
+
         self.user_embedding = nn.Parameter(nn.init.xavier_uniform_(torch.empty(args.user, args.latdim)))
         self.item_embedding = nn.Parameter(nn.init.xavier_uniform_(torch.empty(args.item, args.latdim)))
 
-        # 定义 GNN 层
         self.num_gnn_layers = args.num_gnn_layers
         self.gnn_layers = nn.ModuleList([GNNLayer() for _ in range(self.num_gnn_layers)])
 
-        # 定义 Mamba 层
         self.num_mamba_layers = args.num_mamba_layers
         self.mamba_layers = nn.ModuleList([
             MambaLayer(
@@ -83,32 +78,27 @@ class MambaTransGNN_SelfSupervised(nn.Module):
             ) for _ in range(self.num_mamba_layers)
         ])
 
-        # 自监督学习参数
         self.layer_cl = args.layer_cl
         self.cl_rate = args.lambda_cl
         self.temp = args.tau
         self.eps = args.eps
 
-        # 正则化参数
         self.reg = args.reg
 
     def build_adj_matrix(self, adj):
-        # 优化后的邻接矩阵归一化
         rowsum = np.array(adj.sum(1)).flatten()
-        # 添加1e-7避免除零，并计算度数的-0.5次方
+
         dInvSqrt = np.power(rowsum + 1e-7, -0.5)
-        # 将无穷大和NaN的值设置为0
+
         dInvSqrt[np.isinf(dInvSqrt)] = 0.0
         dInvSqrt[np.isnan(dInvSqrt)] = 0.0
 
-        # 利用元素级乘法代替矩阵乘法
         adj = adj.tocoo()
         adj.data = dInvSqrt[adj.row] * adj.data * dInvSqrt[adj.col]
         normalized_adj = adj.tocsr()
         return normalized_adj
 
     def sparse_mx_to_torch_sparse_tensor(self, sparse_mx):
-        # 将 scipy.sparse 矩阵转换为 torch 稀疏张量
         sparse_mx = sparse_mx.tocoo().astype(np.float32)
         indices = torch.from_numpy(
             np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64)
@@ -118,32 +108,24 @@ class MambaTransGNN_SelfSupervised(nn.Module):
         return torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32, device=args.device)
 
     def forward(self, adj, perturbed=False):
-        # 初始化嵌入
+
         embeds = torch.cat([self.user_embedding, self.item_embedding], dim=0)  # (user + item, latdim)
 
-        # GNN 层的前向传播
         cl_embeds = None
-        #layer_embeds = []
         for layer_idx in range(self.num_gnn_layers):
             embeds = self.gnn_layers[layer_idx](adj, embeds)
             embeds = F.normalize(embeds, p=2, dim=1)
             #embeds = embeds * self.scale + self.shift
             #layer_embeds.append(embeds)
 
-            # 保存用于对比学习的嵌入
             if perturbed and self.layer_cl == layer_idx + 1:
                 cl_embeds = embeds.clone()
         #embeds = torch.mean(torch.stack(layer_embeds), dim=0)
-        # Mamba 层的前向传播
-        embeds = embeds.unsqueeze(0)  # 添加 batch 维度
+        embeds = embeds.unsqueeze(0)  
         for layer_idx in range(self.num_mamba_layers):
             embeds = self.mamba_layers[layer_idx](embeds)
-            #layer_embeds.append(embeds)
-
-            # 保存用于对比学习的嵌入
             if perturbed and self.layer_cl == self.num_gnn_layers + layer_idx + 1:
                 cl_embeds = embeds.squeeze(0).clone()
-        #embeds = torch.mean(torch.stack(layer_embeds), dim=0)
         embeds = embeds.squeeze(0)
 
         user_embeds = embeds[:args.user, :]  # (user, latdim)
@@ -157,13 +139,12 @@ class MambaTransGNN_SelfSupervised(nn.Module):
         return user_embeds, item_embeds
 
     def calculate_loss(self, user_emb, pos_emb, neg_emb, cl_user_emb=None, cl_item_emb=None):
-        # 推荐任务的 BPR 损失
+
         rec_loss = bpr_loss(user_emb, pos_emb, neg_emb)
 
-        # 正则化损失
+
         reg_loss = l2_reg_loss(self.reg, user_emb, pos_emb, neg_emb)
 
-        # 对比学习损失
         if cl_user_emb is not None and cl_item_emb is not None:
             cl_loss_user = InfoNCE(user_emb, cl_user_emb, self.temp)
             cl_loss_item = InfoNCE(pos_emb, cl_item_emb, self.temp)
@@ -176,7 +157,7 @@ class MambaTransGNN_SelfSupervised(nn.Module):
         return total_loss, rec_loss, cl_loss
 
     def calcLosses(self, ancs, poss, negs, adj):
-        # 前向传播，获取嵌入
+
         outputs = self.forward(adj, perturbed=True)
         if len(outputs) == 4:
             user_emb, item_emb, cl_user_emb, cl_item_emb = outputs
@@ -184,7 +165,7 @@ class MambaTransGNN_SelfSupervised(nn.Module):
             user_emb, item_emb = outputs
             cl_user_emb, cl_item_emb = None, None
 
-        # 获取当前批次的嵌入
+
         user_emb_batch = user_emb[ancs]
         pos_emb_batch = item_emb[poss]
         neg_emb_batch = item_emb[negs]
@@ -195,7 +176,6 @@ class MambaTransGNN_SelfSupervised(nn.Module):
         else:
             cl_user_emb_batch, cl_item_emb_batch = None, None
 
-        # 计算损失
         total_loss, rec_loss, cl_loss = self.calculate_loss(
             user_emb_batch, pos_emb_batch, neg_emb_batch, cl_user_emb_batch, cl_item_emb_batch
         )
@@ -230,10 +210,10 @@ class MambaTransGNN_SelfSupervised(nn.Module):
 
                 optimizer.zero_grad()
 
-                # 计算损失
+
                 loss = self.calcLosses(user, pos, neg, adj)
 
-                # 反向传播和优化
+
                 loss.backward()
                 optimizer.step()
 
@@ -242,13 +222,12 @@ class MambaTransGNN_SelfSupervised(nn.Module):
                 if batch_idx % 100 == 0 and batch_idx > 0:
                     print(f'Epoch {epoch+1}/{args.epochs}, Batch {batch_idx}, Total Loss: {total_loss / (batch_idx + 1):.4f}')
 
-            # 每个 epoch 后评估模型性能
             self.evaluate(data_loader.validation_set)
 
     def evaluate(self, validation_set):
         self.eval()
         with torch.no_grad():
-            # 实现您的评估逻辑，例如计算准确率、召回率等
+
             pass
 
     def predict(self, adj):
