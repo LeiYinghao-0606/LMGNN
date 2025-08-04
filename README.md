@@ -27,17 +27,17 @@ Use the following command lines to start training and testing on the four datase
 
 ### Yelp
 ```bash
-python main.py --dataset Yelp
+python main.py --data Yelp
 ```
 ### Tmall
 ```bash
-python main.py --dataset Tmall
+python main.py --data Tmall
 ```
 ### Amazon-Books
 ```bash
-python main.py --dataset Amazon-Books
+python main.py --data Amazon-Books
 ```
 ### MovieLens-10M
 ```bash
-python main.py --dataset ml-10m
+python main.py --data ml-10m
 ```
