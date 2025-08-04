@@ -1,7 +1,7 @@
 import argparse
 def ParseArgs():
     parser = argparse.ArgumentParser(description="LMGNN family hyper-parameters")
-    parser.add_argument("--seed",           type=int,   default=2025,   help="Random seed")
+    parser.add_argument("--seed",           type=int,   default=2024,   help="Random seed")
     parser.add_argument("--lr",             type=float, default=8e-4,   help="Learning Rate")
     parser.add_argument("--batch",          type=int,   default=8192,   help="Batch Size")
     parser.add_argument("--device",         type=str,   default="cuda", help="cuda / cpu")
@@ -26,3 +26,4 @@ def ParseArgs():
     parser.add_argument("--topk", nargs="+", type=int, default=[20, 40], help="Top K for evaluation")
     return parser.parse_args()
 args = ParseArgs()
+
