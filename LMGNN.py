@@ -57,9 +57,9 @@ class GNNLayer(nn.Module):
         adj = adj.to(embeds.device)
         return torch.sparse.mm(adj, embeds)
 
-class MambaTransGNN_SelfSupervised(nn.Module):
+class LMGNN(nn.Module):
     def __init__(self):
-        super(MambaTransGNN_SelfSupervised, self).__init__()
+        super(LMGNN, self).__init__()
 
         self.user_embedding = nn.Parameter(nn.init.xavier_uniform_(torch.empty(args.user, args.latdim)))
         self.item_embedding = nn.Parameter(nn.init.xavier_uniform_(torch.empty(args.item, args.latdim)))
