@@ -3,7 +3,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 import Utils.TimeLogger as logger
 from Utils.TimeLogger import log
 from Params import args
-from LMGNN import MambaTransGNN_SelfSupervised
+from LMGNN import LMGNN
 from DataHandler import DataHandler
 import numpy as np
 import pickle
