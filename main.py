@@ -74,7 +74,6 @@ class Coach:
     def prepareModel(self):
         self.model = LMGNN().cuda()
         self.opt = t.optim.AdamW(self.model.parameters(), lr=args.lr, weight_decay=args.reg)
-        
         self.scheduler = lr_scheduler.ReduceLROnPlateau(
             self.opt,
             mode='max',
@@ -97,10 +96,8 @@ class Coach:
             ancs = ancs.long().cuda()
             poss = poss.long().cuda()
             negs = negs.long().cuda()
-
             bprLoss = self.model.calcLosses(ancs, poss, negs, self.handler.torchBiAdj)
             loss = bprLoss 
-
             epLoss += loss.item()
             epPreLoss += bprLoss.item()
             self.opt.zero_grad()
@@ -123,7 +120,6 @@ class Coach:
             usr = usr.long().cuda()
             trnMask = trnMask.cuda()
             usrEmbeds, itmEmbeds = self.model.predict(self.handler.torchBiAdj)
-
             allPreds = t.mm(usrEmbeds[usr], t.transpose(itmEmbeds, 1, 0)) * (1 - trnMask) - trnMask * 1e8
             _, topLocs = t.topk(allPreds, args.topk)
             recall, ndcg = self.calcRes(topLocs.cpu().numpy(), self.handler.tstLoader.dataset.tstLocs, usr)
@@ -164,17 +160,12 @@ class Coach:
         history_dir = '../History'
         if not os.path.exists(history_dir):
             os.makedirs(history_dir)
-
-
         history_path = os.path.join(history_dir, args.save_path + '.his')
         with open(history_path, 'wb') as fs:
             pickle.dump(self.metrics, fs)
-
         models_dir = '../Models'
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
-
-
         model_path = os.path.join(models_dir, args.save_path + '.mod')
         content = {
             'model': self.model,
@@ -182,8 +173,6 @@ class Coach:
             'scheduler': self.scheduler.state_dict(),  
         }
         t.save(content, model_path)
-
-
         log('Model Saved: %s' % args.save_path)
 
     def loadModel(self):
@@ -215,7 +204,6 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     setproctitle.setproctitle('proc_title')
     logger.saveDefault = True
-    
     log('Start')
     handler = DataHandler()
     handler.LoadData()
