@@ -27,15 +27,15 @@ Use the following command lines to start training and testing on the four datase
 
 ### Yelp
 ```bash
-python main.py --data Yelp
+python main.py --data yelp
 ```
 ### Tmall
 ```bash
-python main.py --data Tmall
+python main.py --data tmall
 ```
 ### Amazon-Books
 ```bash
-python main.py --data Amazon-Books
+python main.py --data amazon-books
 ```
 ### MovieLens-10M
 ```bash
