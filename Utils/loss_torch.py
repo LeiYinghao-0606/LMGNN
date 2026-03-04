@@ -46,12 +46,6 @@ def Stable_Adaptive_InfoNCE_Sampled(
     strata_uniform: float = 0.5,
     eps: float = 1e-12,
 ):
-    """
-    Sampled approximation that is CONSISTENT with Stable_Adaptive_InfoNCE:
-      - similarity uses view1 @ view2^T (no extra "+ view1")
-      - alpha is applied to positive logit (and included in denominator via logaddexp)
-      - negatives are importance-sampled with proposal q and corrected by -log q
-    """
     assert temperature > 0, "temperature must be positive"
 
     if b_cos:
@@ -141,17 +135,13 @@ def Stable_Adaptive_InfoNCE_Sampled(
     if K <= 0:
         return Stable_Adaptive_InfoNCE(view1, view2, temperature, b_cos=False, alpha=alpha)
 
-    # ---- negatives (IMPORTANT: use view2 only; no "+ view1") ----
+    # ---- negatives 
     neg_bank = view2.index_select(0, idx)  # [K, D]
     neg_logits = (view1 @ neg_bank.t()) / temperature  # [B, K]
 
     log_q = torch.log(q.index_select(0, idx) + eps).to(dtype=neg_logits.dtype)  # [K]
 
-    # importance-corrected estimate of SUM exp(neg_logits) over the batch bank
-    # logZ_neg ≈ log( (1/K) * Σ_k exp(neg_logits_k) / q(idx_k) )
     logZ_neg = torch.logsumexp(neg_logits - log_q.view(1, -1), dim=1) - math.log(K)
-
-    # denominator includes positive term explicitly (consistent with full softmax formulation)
     log_denom = torch.logaddexp(pos_logit, logZ_neg)
 
     loss = -(pos_logit - log_denom).mean()
