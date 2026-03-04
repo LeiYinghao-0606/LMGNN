@@ -22,16 +22,6 @@ class GNNLayer(nn.Module):
 
 
 class MambaDepthGating(nn.Module):
-    """
-    Degree-conditioned Mamba depth gating:
-      - logits: [B, L]
-      - fused : [B, D]
-
-    Modified:
-      - remove activation dropout on y
-      - add new view augmentations specialized for L=2 (alpha-gating)
-        (only active when perturbed=True, used for CL view)
-    """
     def __init__(
         self,
         d_model,
@@ -39,18 +29,16 @@ class MambaDepthGating(nn.Module):
         d_state=8,
         d_conv=4,
         expand=2,
-        dropout=0.0,     # kept for compatibility; unused
+        dropout=0.0,     
         temp=1.0,
         depth_drop=0.0,
         depth_noise=0.0,
         deg_cond=True,
-
-        # ===== NEW: L=2 specialized view aug knobs =====
-        beta_k=0.0,              # args.gate_beta_k (e.g., 10~80). 0 disables
-        concrete_tau=0.0,        # args.gate_concrete_tau (e.g., 0.3~1.0). 0 disables
-        t_df=0.0,                # args.gate_t_df (e.g., 3,5,8). 0 disables
-        t_scale=0.0,             # args.gate_t_scale (e.g., 0.02~0.10). 0 disables
-        adv_eps=0.0,             # args.gate_adv_eps (FGSM on diff; optional). 0 disables
+        beta_k=0.0,             
+        concrete_tau=0.0,     
+        t_df=0.0,               
+        t_scale=0.0,            
+        adv_eps=0.0,             
     ):
         super().__init__()
         self.gate_dim = int(gate_dim)
@@ -97,11 +85,6 @@ class MambaDepthGating(nn.Module):
         return logits
 
     def _augment_logits_general(self, logits):
-        """
-        keep your existing behavior:
-          - depth_drop for L>2 mid tokens (unused when L=2)
-          - gaussian depth_noise (must keep)
-        """
         B, L = logits.shape
         out = logits
 
@@ -112,27 +95,18 @@ class MambaDepthGating(nn.Module):
             neg_inf = torch.finfo(out.dtype).min
             out = out.masked_fill(~keep, neg_inf)
 
-        # MUST keep gaussian noise (your fixed depth_noise=0.05)
         if self.depth_noise > 0:
             out = out + self.depth_noise * torch.randn_like(out)
 
         return out
 
     def _alpha_from_logits_L2(self, logits):
-        """
-        logits: [B,2]
-        return alpha in (0,1): w = [1-alpha, alpha]
-        """
         temp = max(self.temp, 1e-6)
         diff = (logits[:, 1] - logits[:, 0]) / temp   # [B]
         alpha = torch.sigmoid(diff)                   # [B]
         return alpha, diff
 
     def _sample_alpha_beta(self, alpha):
-        """
-        alpha: [B] in (0,1)
-        Beta(k*alpha, k*(1-alpha)) centered at alpha; rsample for gradient.
-        """
         k = self.beta_k
         if k <= 0:
             return alpha
@@ -144,10 +118,6 @@ class MambaDepthGating(nn.Module):
         return dist.rsample().clamp(0.0, 1.0)
 
     def _sample_alpha_concrete(self, diff):
-        """
-        diff: [B] where alpha = sigmoid(diff)
-        sample alpha via RelaxedBernoulli(logits=diff)
-        """
         tau = self.concrete_tau
         if tau <= 0:
             return None
@@ -158,9 +128,6 @@ class MambaDepthGating(nn.Module):
         return dist.rsample().clamp(0.0, 1.0)
 
     def _heavy_tail_diff(self, diff):
-        """
-        Student-t heavy-tail noise on diff (L=2).
-        """
         if (self.t_df <= 0) or (self.t_scale <= 0) or (not self.training):
             return diff
         df = torch.tensor(self.t_df, device=diff.device, dtype=diff.dtype)
@@ -169,19 +136,10 @@ class MambaDepthGating(nn.Module):
         return diff + noise
 
     def fuse_from_logits(self, seq, logits, perturbed=False, adv_grad=None):
-        """
-        seq:   [B, L, D]
-        logits:[B, L]
-        perturbed: used for CL view
-        adv_grad: optional adversarial gradient on diff (L=2), shape [B]
-        """
-        # --- apply baseline logit aug (kept) ---
         if perturbed:
             logits = self._augment_logits_general(logits)
 
         B, L, D = seq.shape
-
-        # ===== L=2 specialized alpha view =====
         if L == 2:
             alpha, diff = self._alpha_from_logits_L2(logits)
 
@@ -190,28 +148,23 @@ class MambaDepthGating(nn.Module):
                 diff = self._heavy_tail_diff(diff)
                 alpha = torch.sigmoid(diff)
 
-                # optional FGSM on diff if adv_grad is provided
                 if (self.adv_eps > 0) and (adv_grad is not None):
                     # adv_grad should be normalized outside if desired
                     diff = diff + self.adv_eps * adv_grad
                     alpha = torch.sigmoid(diff)
 
-                # Beta-centered sampling (centered at alpha)
                 if self.beta_k > 0:
                     alpha = self._sample_alpha_beta(alpha)
 
-                # Concrete sampling (directly from diff)
                 if self.concrete_tau > 0:
                     alpha_c = self._sample_alpha_concrete(diff)
                     if alpha_c is not None:
                         alpha = alpha_c
 
-            # fuse
             alpha = alpha.view(B, 1)  # [B,1]
             fused = (1.0 - alpha) * seq[:, 0, :] + alpha * seq[:, 1, :]
             return fused
 
-        # ===== general L>2 =====
         w = torch.softmax(logits / max(self.temp, 1e-6), dim=1)  # [B, L]
         fused = torch.sum(seq * w.unsqueeze(-1), dim=1)
         return fused
@@ -260,7 +213,7 @@ class LMGNN(nn.Module):
             d_state=int(getattr(args, "d_state", 8)),
             d_conv=int(getattr(args, "d_conv", 4)),
             expand=int(getattr(args, "expand", 2)),
-            dropout=float(getattr(args, "gate_dropout", 0.0)),   # unused
+            dropout=float(getattr(args, "gate_dropout", 0.0)),
             temp=self.gate_temp,
             depth_drop=self.depth_drop,
             depth_noise=self.depth_noise,
@@ -273,8 +226,7 @@ class LMGNN(nn.Module):
             adv_eps=self.gate_adv_eps,
         )
 
-        # losses (keep)
-        self.cl_rate = float(getattr(args, "lambda_cl", 0.0))  # keep 0.04
+        self.cl_rate = float(getattr(args, "lambda_cl", 0.0))
         self.temp = float(getattr(args, "tau", 0.2))
         self.reg = float(getattr(args, "reg", 1e-4))
 
@@ -385,7 +337,6 @@ class LMGNN(nn.Module):
             seq_up = seq_all[:2 * B]          # [2B, L, D]
             logits_up = logits_all[:2 * B]    # [2B, L]
 
-            # optional: adversarial on diff (FGSM) — stronger but costs 1 autograd.grad
             adv_grad = None
             if getattr(args, "gate_adv_eps", 0.0) > 0 and seq_up.size(1) == 2:
                 logits_req = logits_up.detach().requires_grad_(True)
