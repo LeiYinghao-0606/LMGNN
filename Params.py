@@ -22,11 +22,11 @@ def ParseArgs():
     parser.add_argument("--expand",          type=int,   default=2,     help="Mamba expansion factor")
 
     parser.add_argument("--gate_dim",        type=int,   default=16,     help="gate_dim")
-    parser.add_argument("--gate_temp",       type=float, default=0.8,  help="yelp:0.8  tmall:0.8 amazon-books: 0.6")
-    parser.add_argument("--depth_noise",     type=float, default=0.05,  help="yelp:0.05  tmall:0.05, amazon-books: 0.06")
+    parser.add_argument("--gate_temp",       type=float, default=0.8,  help="yelp:0.8  tmall:0.8")
+    parser.add_argument("--depth_noise",     type=float, default=0.05,  help="yelp:0.05  tmall:0.05")
     parser.add_argument("--gate_adv_eps",    type=float, default=0.1,  help="yelp:0.1  tmall:0.25")
-    parser.add_argument("--lambda_cl",       type=float, default=0.04,  help="CL rate, Yelp:0.04 Tmall:0.04 amazon-books: 0.06")
-    parser.add_argument("--tau",             type=float, default=0.2,   help="Temperature for contrastive loss, Yelp: 0.2 Tmall: 0.15 amazon-books: 0.15")
+    parser.add_argument("--lambda_cl",       type=float, default=0.04,  help="CL rate, Yelp:0.04 Tmall:0.04")
+    parser.add_argument("--tau",             type=float, default=0.2,   help="Temperature for contrastive loss, Yelp: 0.2 Tmall: 0.15")
     parser.add_argument("--cl_neg_samples",  type=int,   default=2048,  help="Number of negatives per sample for CL (0=full)")
     parser.add_argument("--cl_mix_uniform",  type=float, default=0.2,  help="Mix ratio for uniform vs weighted sampling in CL")
     parser.add_argument("--cl_pop_beta",     type=float, default=0.5,  help="Exponent for popularity weights in CL sampling")
@@ -38,4 +38,5 @@ def ParseArgs():
     parser.add_argument("--early_stop_min_delta", type=float, default=1e-4, help="Minimum improvement to reset early stop")
     return parser.parse_args()
 args = ParseArgs()
+
 
