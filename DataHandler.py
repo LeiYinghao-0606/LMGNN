@@ -14,18 +14,12 @@ class DataHandler:
     def __init__(self):
         if args.data == 'yelp':
             predir = 'Data/yelp/'
-        elif args.data == 'yelp2018':
-            predir = 'Data/yelp2018/'
         elif args.data == 'ml-10m':
             predir = 'Data/ml-10m/'
         elif args.data == 'tmall':
             predir = 'Data/tmall/'
-        elif args.data == 'gowalla':
-            predir = 'Data/gowalla/'
         elif args.data == 'amazon-books':
             predir = 'Data/amazon-books/'
-        elif args.data == 'gowalla':
-            predir = 'Data/gowalla/'
         else:
             raise ValueError(f"Unknown dataset: {args.data}")
         self.predir = predir
