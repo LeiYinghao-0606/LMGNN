@@ -4,9 +4,6 @@ import numpy as np
 import json
 from typing import Dict, List, Tuple, Union, Any, Optional
 
-# =========================
-# your original functions
-# =========================
 
 def innerProduct(usrEmbeds, itmEmbeds):
     return t.sum(usrEmbeds * itmEmbeds, dim=-1)
@@ -30,9 +27,6 @@ def contrastLoss(embeds1, embeds2, nodes, temp):
     deno = t.exp(pckEmbeds1 @ embeds2.T / temp).sum(-1) + 1e-8
     return -t.log(nume / deno).mean()
 
-# =========================
-# NEW: degree bucket utilities
-# =========================
 
 PerUserMetric = Union[Dict[int, float], np.ndarray, t.Tensor]
 PerUserMetricByK = Dict[int, PerUserMetric]
@@ -50,19 +44,6 @@ def build_degree_buckets(
     n_buckets: int = 4,
     mode: str = "quantile",
 ) -> Tuple[List[List[int]], Dict[str, Any]]:
-    """
-    Build degree buckets for a given set of users.
-
-    Args:
-        user_ids: users involved in evaluation (e.g., testUsers)
-        user_train_deg: degree array over ALL users (train-degree only), shape [U]
-        n_buckets: number of buckets (default 4)
-        mode: 'quantile' supported
-
-    Returns:
-        buckets: list of user-id lists, length n_buckets
-        meta: dict with bucket thresholds and stats
-    """
     u = _to_numpy_1d(user_ids).astype(np.int64)
     deg_all = _to_numpy_1d(user_train_deg).astype(np.float64)
     deg = deg_all[u]
@@ -94,13 +75,6 @@ def build_degree_buckets(
     return buckets, meta
 
 def _metric_get_for_users(metric: PerUserMetric, users: List[int]) -> float:
-    """
-    Aggregate a per-user metric over a subset of users.
-    metric can be:
-      - dict {u: value}
-      - np.ndarray shape [U]
-      - torch.Tensor shape [U]
-    """
     if len(users) == 0:
         return 0.0
 
@@ -121,16 +95,6 @@ def degree_bucket_report(
     bucket_mode: str = "quantile",
     bucket_names: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """
-    Make a structured report for degree-bucket evaluation.
-
-    Inputs expected:
-      - per_user_recall_atK[K]: per-user Recall@K (dict or array)
-      - per_user_ndcg_atK[K]:   per-user NDCG@K   (dict or array)
-
-    Returns:
-      report dict with 'meta' and 'rows'
-    """
     if bucket_names is None:
         # paper-friendly default
         if len(Ks) > 0:
@@ -174,9 +138,6 @@ def degree_bucket_report(
     return report
 
 def print_degree_bucket_report(report: Dict[str, Any], Ks: Tuple[int, ...] = (20, 40)):
-    """
-    Pretty print report returned by degree_bucket_report().
-    """
     meta = report.get("meta", {})
     rows = report.get("rows", [])
     ths = meta.get("thresholds", None)
@@ -196,8 +157,5 @@ def print_degree_bucket_report(report: Dict[str, Any], Ks: Tuple[int, ...] = (20
         print(s)
 
 def save_degree_bucket_report_json(report: Dict[str, Any], path: str):
-    """
-    Save degree bucket report to json for plotting later.
-    """
     with open(path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
