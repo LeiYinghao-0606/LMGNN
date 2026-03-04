@@ -13,7 +13,6 @@ import setproctitle
 import random
 import time
 
-# ===== NEW: epoch-only 日志（step 只终端单行刷新；仅 epoch 汇总写文件）=====
 import json
 import atexit
 from datetime import datetime
@@ -23,7 +22,6 @@ _RUN_LOG_PATH = None
 
 
 def _dataset_name(args_obj):
-    """尽量从 args 中推断数据集名称。"""
     for k in ("dataset", "data", "data_name", "dataset_name", "dataname"):
         v = getattr(args_obj, k, None)
         if v is not None and str(v).strip():
@@ -32,10 +30,6 @@ def _dataset_name(args_obj):
 
 
 def _base_log_dir():
-    """
-    复用 TimeLogger 中原本定义的日志目录（若能取到）。
-    取不到则回退到 ../Log
-    """
     for attr in ("logPath", "log_dir", "logDir", "LOG_DIR", "path"):
         base = getattr(logger, attr, None)
         if isinstance(base, str) and base.strip():
@@ -44,7 +38,6 @@ def _base_log_dir():
 
 
 def _args_dict(args_obj):
-    """将 args 转为可 JSON 序列化的 dict。"""
     d = dict(vars(args_obj)) if hasattr(args_obj, "__dict__") else {}
 
     def safe(v):
@@ -58,10 +51,6 @@ def _args_dict(args_obj):
 
 
 def init_epoch_log(args_obj):
-    """
-    创建并写入日志头：
-    <TimeLogger原始目录>/<dataset>/<save_path>_<timestamp>.log
-    """
     global _RUN_LOG_FH, _RUN_LOG_PATH
 
     out_dir = os.path.join(_base_log_dir(), _dataset_name(args_obj))
@@ -72,7 +61,6 @@ def init_epoch_log(args_obj):
     _RUN_LOG_PATH = os.path.join(out_dir, f"{run_name}_{ts}.log")
     _RUN_LOG_FH = open(_RUN_LOG_PATH, "a", encoding="utf-8", buffering=1)
 
-    # 让 TimeLogger 的输出目录也指向 dataset 子目录（即便后续不写文件，也更一致）
     if hasattr(logger, "logPath"):
         try:
             logger.logPath = out_dir + ("/" if not out_dir.endswith("/") else "")
@@ -87,7 +75,6 @@ def init_epoch_log(args_obj):
     _RUN_LOG_FH.write(json.dumps(_args_dict(args_obj), ensure_ascii=False, indent=2) + "\n")
     _RUN_LOG_FH.write("=" * 90 + "\n")
 
-    # 终端提示一次（不写 TimeLogger 默认日志）
     tlog(f"Epoch-only log enabled: {_RUN_LOG_PATH}", save=False, oneline=False)
 
     atexit.register(close_epoch_log)
@@ -112,25 +99,16 @@ def _write_epoch_line(msg: str):
 
 
 def log(msg, save=True, oneline=False):
-    """
-    统一日志入口：
-    - 终端输出：仍使用 TimeLogger 的打印能力（支持 oneline 单行刷新）
-    - 文件写入：仅当 save=True 且 oneline=False 时写入（即 epoch 汇总/关键事件）
-    """
-    # 关键：强制 TimeLogger 不落盘，避免重复/混乱
     tlog(msg, save=False, oneline=oneline)
 
     if save and (not oneline):
         _write_epoch_line(str(msg))
 
-
-# === 参数统计与显存估算工具 ===
 def count_params(model, trainable_only=False):
     return sum(p.numel() for p in model.parameters() if (p.requires_grad or not trainable_only))
 
 
 def param_memory_bytes(model):
-    # 仅参数本体（不含梯度/优化器状态）
     return sum(p.numel() * p.element_size() for p in model.parameters())
 
 
@@ -159,7 +137,7 @@ def set_seed(seed):
     np.random.seed(seed)
     t.manual_seed(seed)
     t.cuda.manual_seed(seed)
-    t.cuda.manual_seed_all(seed)  # 如果使用多GPU
+    t.cuda.manual_seed_all(seed) 
     t.backends.cudnn.deterministic = True
     t.backends.cudnn.benchmark = False
 
@@ -192,10 +170,8 @@ class Coach:
         self.metrics["TrainTime"] = list()
         self.metrics["TestTime"] = list()
 
-        # 预留模型信息容器（将随历史一并保存）
         self.metrics["ModelInfo"] = {}
 
-        # Early stopping state
         self.best_metric = float("-inf")
         self.no_improve = 0
 
@@ -236,17 +212,14 @@ class Coach:
 
             tstFlag = (ep % args.tstEpoch == 0)
 
-            # 训练
             reses, train_elapsed = self.trainEpoch()
             log(self.makePrint("Train", ep, reses, tstFlag, epoch_time=train_elapsed))
 
-            # 测试
             if tstFlag:
                 reses, test_elapsed = self.testEpoch()
                 log(self.makePrint("Test", ep, reses, tstFlag, epoch_time=test_elapsed))
                 self.saveHistory()
 
-                # Early stopping on primary metric
                 metric_key = f"Recall@{args.topk[0]}"
                 cur_metric = reses.get(metric_key, None)
                 if cur_metric is not None:
@@ -262,17 +235,14 @@ class Coach:
             current_lr = self.opt.param_groups[0]["lr"]
             log(f"Current Learning Rate: {current_lr}")
 
-        # 训练结束后再做一次测试
         reses, test_elapsed = self.testEpoch()
         log(self.makePrint("Test", args.epoch, reses, True, epoch_time=test_elapsed))
         self.saveHistory()
 
     def prepareModel(self):
         self.model = LMGNN().cuda()
-        # 避免与损失里的 L2 正则重复，这里不设置 weight_decay
         self.opt = t.optim.AdamW(self.model.parameters(), lr=args.lr)
 
-        # 统计参数与显存，并记录到 epoch 日志
         total_params = count_params(self.model, trainable_only=False)
         trainable_params = count_params(self.model, trainable_only=True)
         param_bytes = param_memory_bytes(self.model)
@@ -350,7 +320,6 @@ class Coach:
             epLoss += loss.item()
             epPreLoss += bprLoss.item()
 
-            # step 信息：终端单行刷新，不写入文件
             log("Step %d/%d: loss = %.3f      " % (i, steps, float(loss.item())), save=False, oneline=True)
 
         ret = dict()
@@ -361,9 +330,6 @@ class Coach:
         return ret, total_train_time
 
     def testEpoch(self):
-        """
-        根据多种 k (args.topk) 计算 Recall@k、NDCG@k
-        """
         tstLoader = self.handler.tstLoader
         k_list = args.topk
         max_k = max(k_list)
@@ -424,7 +390,6 @@ class Coach:
                 epRecall_dict[k] += recall_k
                 epNdcg_dict[k] += ndcg_k
 
-            # 测试进度：终端单行刷新，不写入文件
             info_str = f"Steps {i}/{steps}: "
             for k in k_list:
                 avg_recall = epRecall_dict[k] / (i * args.tstBat)
@@ -533,10 +498,8 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     setproctitle.setproctitle("proc_title")
 
-    # 关键：关闭 TimeLogger 自带的落盘机制，避免重复/混乱
     logger.saveDefault = False
     logger.logPath = "/root/LMGNN/History"  
-    # 启用 epoch-only 文件日志：<TimeLogger原始目录>/<dataset>/<save_path>_<time>.log
     init_epoch_log(args)
 
     log("Start")
