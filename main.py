@@ -3,7 +3,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 import Utils.TimeLogger as logger
 from Utils.TimeLogger import log as tlog
 from Params import args
-from model1 import LMGNN
+from model import LMGNN
 from DataHandler import DataHandler
 import numpy as np
 import pickle
