@@ -1,4 +1,4 @@
-# LMGNN: Long-Range Graph Data Modeling with Mamba Attention for Recommender Systems
+# LMGNN: Long-Range Graph Modeling for Recommender Systems
 
 This repository provides the official implementation for our paper : " LMGNN: Long-Range Graph Modeling for Recommender Systems ".
 
